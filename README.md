@@ -1,3 +1,5 @@
+This fork enables fast generation of depth map through OpenGL. See `CelebA.py`
+
 # Joint 3D Face Reconstruction and Dense Alignment with Position Map Regression Network
 
 <p align="center"> 
