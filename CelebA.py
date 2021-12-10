@@ -18,7 +18,11 @@ logger = logging.getLogger(__name__)
 class CelebA(Dataset):
     def __init__(self, path, expand_bb=1.6, cropped_res=256):
         self.base_path = path
-        self.image_path_list = list(tqdm(glob.iglob(os.path.join(path, '*/*/live/*.jpg')), desc='Enumerating images'))
+        def f():
+            exts = ('.jpg', '.png')
+            for e in exts:
+                yield from glob.iglob(os.path.join(path, '*/*/live/*' + e))
+        self.image_path_list = list(tqdm(f(), desc='Enumerating images'))
         self.expand_bb = expand_bb
         self.cropped_res = cropped_res
 
