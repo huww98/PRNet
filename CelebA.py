@@ -3,6 +3,7 @@ import glob
 import logging
 import math
 import os
+import re
 
 from skimage.io import imread, imsave
 from skimage.transform import SimilarityTransform, warp
@@ -26,7 +27,9 @@ class FaceDataset(Dataset):
 
     def __getitem__(self, index):
         image, bb, rel_path = self.face_images[index]
-        image = image/255.
+        image = image/255.  # type: np.ndarray
+        if len(image.shape) == 2:
+            image = image[..., np.newaxis]
         h, w, c = image.shape
         if bb is not None:
             bb[0] -= bb[1] * (self.expand_bb - 1) / 2
@@ -40,6 +43,7 @@ class FaceDataset(Dataset):
             translation=self.cropped_res / 2 - (bb[0] + bb[1] / 2) * scale,
         )
         image = warp(image, tform.inverse, output_shape=(self.cropped_res, self.cropped_res))
+        image = np.broadcast_to(image, (self.cropped_res, self.cropped_res, 3))
         return image, os.path.splitext(rel_path)[0]
 
 class CelebA:
@@ -71,10 +75,39 @@ class CelebA:
             bb = None
         return image, bb, os.path.relpath(p, self.base_path)
 
+class IR:
+    LINE_RE = re.compile(r'\t([^~]+)~([\d.]+(?:,[\d.]+){3})~')
+
+    def __init__(self, base_path, file_list):
+        self.base_path = base_path
+        def parse():
+            for l in tqdm(open(file_list, 'r'), desc='Reading file list'):
+                m = self.LINE_RE.search(l)
+                rel_path = m.group(1)
+                if rel_path.startswith('real/'):
+                    yield rel_path, m.group(2)
+        self.lines = list(parse())
+
+    def __len__(self):
+        return len(self.lines)
+
+    def __getitem__(self, index):
+        rel_path, bb = self.lines[index]
+        img = imread(os.path.join(self.base_path, rel_path))
+        bb = np.array([float(b) for b in bb.split(',')]).reshape(2,2)
+        bb[1] -= bb[0]
+        return img, bb, rel_path
+
+IR_BASE = '/mnt/cephfs/dataset/face_anti_spoofing_lock/fas_nir_datasets/fas_dataset_nir_20211101_unzip_h/'
+
 def main(args):
     dataloader = DataLoader(
         FaceDataset(
-            CelebA(args.celebA_path),
+            # CelebA(args.celebA_path),
+            IR(
+                base_path=IR_BASE + 'trainset',
+                file_list=IR_BASE + 'bbox/all.txt',
+            )
         ),
         batch_size=64,
         num_workers=32,
@@ -102,7 +135,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--celebA_path', default='/mnt/cephfs/dataset/FAS/CelebA_Spoof/CelebA_Spoof/Data')
-    parser.add_argument('--output', default='/mnt/cephfs/dataset/FAS/CelebA_Spoof/depth')
+    parser.add_argument('--output', default=IR_BASE + 'depth/trainset')
     args = parser.parse_args()
     main(args)
 
