@@ -4,12 +4,14 @@ import logging
 import math
 import os
 import re
+import zipfile
 
-from skimage.io import imread, imsave
+from skimage.io import imread
 from skimage.transform import SimilarityTransform, warp
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 import numpy as np
+import cv2
 
 from api import PRN
 from render import FaceRenderer
@@ -116,6 +118,7 @@ def main(args):
 
     triangles = prn.face_ind[prn.triangles]
     r = FaceRenderer(triangles)
+    output_zip = zipfile.ZipFile(args.output, 'w', zipfile.ZIP_STORED, allowZip64=True)
     for images, paths in tqdm(dataloader):
         pos = prn.pos_predictor.predict_batch(images.numpy())
         rendered_imgs = r.draw_batch(pos)
@@ -124,18 +127,20 @@ def main(args):
         rendered_imgs = (1 - rendered_imgs) / (1 - m)
 
         for img, p in zip(rendered_imgs, paths):
-            p = os.path.join(args.output, p) + '.png'
             try:
                 os.makedirs(os.path.dirname(p))
             except OSError:
                 pass
-            imsave(p, img)
+            img = (img * 255.).astype(np.uint8)
+            retval, buf = cv2.imencode('.png', img)
+            output_zip.writestr(p + '.png', buf)
 
+    output_zip.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--celebA_path', default='/mnt/cephfs/dataset/FAS/CelebA_Spoof/CelebA_Spoof/Data')
-    parser.add_argument('--output', default=IR_BASE + 'depth/trainset')
+    parser.add_argument('--output', default=IR_BASE + 'depth_trainset.zip')
     args = parser.parse_args()
     main(args)
 
