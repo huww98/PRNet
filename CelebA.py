@@ -48,7 +48,8 @@ class CelebA:
         def f():
             exts = ('.jpg', '.png')
             for e in exts:
-                yield from glob.iglob(os.path.join(path, '*/*/live/*' + e))
+                for p in glob.iglob(os.path.join(path, '*/*/live/*' + e)):
+                    yield p
         self.image_path_list = list(tqdm(f(), desc='Enumerating images'))
 
     def __len__(self):
